@@ -140,4 +140,7 @@ cython_debug/
 *.json
 *.c
 
+# Data and models
 exp_runs/
+data1/
+*.tar.gz

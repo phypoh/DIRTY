@@ -915,11 +915,13 @@ class Union(UDT):
     def _from_json(cls, d: t.Dict[str, t.Any]) -> "Union":
         return cls(name=d["n"], members=d["m"], padding=d["p"] if "p" in d else None)
 
+
     def _to_json(self) -> t.Dict[str, t.Any]:
         encoded = {
             "T": 7,
             "n": self.name,
             "m": [m._to_json() for m in self.members],
+            #"p": self.padding._to_json(),
         }
         if self.has_padding():
             encoded["p"] = self.padding._to_json()

@@ -3,7 +3,7 @@ Variable renaming
 
 Usage:
     exp.py train [options] CONFIG_FILE
-    exp.py test [options] MODEL_FILE TEST_DATA_FILE
+    exp.py predict [options] CONFIG_FILE MODEL_FILE TEST_DATA_FILE
 
 Options:
     -h --help                                   Show this screen
@@ -35,6 +35,8 @@ from torch.utils.data import DataLoader
 from model.model import TypeReconstructionModel
 from utils import util
 from utils.dataset import Dataset
+
+from pytorch_lightning import Trainer
 
 
 def train(args):
@@ -113,6 +115,42 @@ def train(args):
     else:
         trainer.fit(model, train_loader, val_loader)
 
+def predict(args):
+    """
+    exp.py predict [options] CONFIG_FILE MODEL_FILE DATA_FILE
+    """
+    
+    config = json.loads(_jsonnet.evaluate_file(args["CONFIG_FILE"]))
+    model_file = args["MODEL_FILE"]
+    test_data_file = args["TEST_DATA_FILE"] 
+
+    # https://github.com/Lightning-AI/lightning/issues/2909
+    model = TypeReconstructionModel(config)
+    checkpoint = torch.load(model_file)
+    loaded_model = model.load_state_dict(checkpoint["state_dict"], strict=False)
+        
+    # Check: All keys matched successfully
+    # print(loaded_model)
+
+    # Load dataset
+    dataset = Dataset(
+        config["data"]["test_file"], config["data"]
+    )
+
+    dataloader = DataLoader(
+        dataset, num_workers=8, batch_size=64, collate_fn=Dataset.collate_fn
+    )
+
+    input_dict, target_dict = next(iter(dataloader))
+    
+    # batch type: Tuple[Dict[str, Union[torch.Tensor, int]], Dict[str, torch.Tensor]]
+    # input_dict, target_dict = batch # WHAT IS THIS
+    context_encoding = model.encoder(input_dict)
+    preds = model.decoder.predict(
+       context_encoding, input_dict, None, 1
+    )
+    
+    print(preds)
 
 if __name__ == "__main__":
     cmd_args = docopt(__doc__)
@@ -131,3 +169,8 @@ if __name__ == "__main__":
 
     if cmd_args["train"]:
         train(cmd_args)
+    elif cmd_args["predict"]:
+        print("Predicting")
+        predict(cmd_args)
+        
+    

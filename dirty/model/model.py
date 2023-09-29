@@ -25,6 +25,11 @@ class RenamingDecodeModule(pl.LightningModule):
             self.decoder.mem_decoder = self.mem_decoder
         self.beam_size = config["test"]["beam_size"]
 
+    def forward(self, x):
+        # in lightning, forward defines the prediction/inference actions
+        embedding = self.encoder(x)
+        return embedding
+
     def training_step(self, input_dict, context_encoding, target_dict):
         variable_name_logits = self.decoder(context_encoding, target_dict)
         if self.soft_mem_mask:
@@ -45,6 +50,9 @@ class RenamingDecodeModule(pl.LightningModule):
             )
             loss = loss[target_dict["target_mask"]]
         return loss.mean()
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        return self(batch)
 
     def shared_eval_step(self, context_encoding, input_dict, target_dict, test=False):
         variable_name_logits = self.decoder(context_encoding, target_dict)
@@ -89,6 +97,11 @@ class RetypingDecodeModule(pl.LightningModule):
             self.decoder.mem_decoder = self.mem_decoder
         self.beam_size = config["test"]["beam_size"]
 
+    def forward(self, x):
+        # in lightning, forward defines the prediction/inference actions
+        embedding = self.encoder(x)
+        return embedding
+
     def training_step(self, input_dict, context_encoding, target_dict):
         variable_type_logits = self.decoder(context_encoding, target_dict)
         if self.soft_mem_mask:
@@ -115,6 +128,9 @@ class RetypingDecodeModule(pl.LightningModule):
             ]
 
         return loss.mean()
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        return self(batch)
 
     def shared_eval_step(self, context_encoding, input_dict, target_dict, test=False):
         variable_type_logits = self.decoder(context_encoding, target_dict)
@@ -166,6 +182,11 @@ class InterleaveDecodeModule(pl.LightningModule):
             self.decoder.mem_encoder = self.mem_encoder
             self.decoder.mem_decoder = self.mem_decoder
 
+    def forward(self, x):
+        # in lightning, forward defines the prediction/inference actions
+        embedding = self.encoder(x)
+        return embedding
+
     def training_step(self, input_dict, context_encoding, target_dict):
         variable_type_logits, variable_name_logits = self.decoder(
             context_encoding, target_dict
@@ -198,6 +219,9 @@ class InterleaveDecodeModule(pl.LightningModule):
         rename_loss = rename_loss[target_dict["target_mask"]].mean()
 
         return retype_loss, rename_loss
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        return self(batch)
 
     def shared_eval_step(self, context_encoding, input_dict, target_dict, test=False):
         variable_type_logits, variable_name_logits = self.decoder(
@@ -251,6 +275,7 @@ class TypeReconstructionModel(pl.LightningModule):
         if config_load is not None:
             config = config_load
         self.encoder = Encoder.build(config["encoder"])
+        # self.decoder = Decoder.build({**config["decoder"]})
         self.retype = config["data"].get("retype", False)
         self.rename = config["data"].get("rename", False)
         self.interleave = config["data"].get("interleave", False)
@@ -278,6 +303,11 @@ class TypeReconstructionModel(pl.LightningModule):
                 for _, tp in typelib[size]:
                     self.typstr_to_piece[str(tp)] = tp.tokenize()[:-1]
         self.typstr_to_piece["<unk>"] = ["<unk>"]
+
+    def forward(self, x):
+        # in lightning, forward defines the prediction/inference actions
+        embedding = self.encoder(x)
+        return embedding
 
     def training_step(
         self,
@@ -315,6 +345,9 @@ class TypeReconstructionModel(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         return self._shared_eval_step(batch, batch_idx, test=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        return self(batch)
 
     def _shared_eval_step(
         self,
@@ -432,6 +465,24 @@ class TypeReconstructionModel(pl.LightningModule):
             num_funcs += len(target_num)
         body_in_train_mask = torch.tensor(body_in_train_mask)
         name_in_train_mask = torch.tensor(name_in_train_mask)
+        
+        # CHANGES HERE by CMS
+        
+        if body_in_train_mask.dim() > 1:
+            # HACK for data parallel
+            body_in_train_mask = body_in_train_mask[:, 0]
+            name_in_train_mask = name_in_train_mask[:, 0]
+        
+        return {
+            "indexes": indexes,
+            "tgt_var_names": tgt_var_names,
+            f"{task}_preds": preds,
+            f"{task}_targets": preds,
+            "body_in_train_mask": body_in_train_mask,
+        }
+        
+        # CHANGES END HERE by CMS
+        
         if body_in_train_mask.dim() > 1:
             # HACK for data parallel
             body_in_train_mask = body_in_train_mask[:, 0]
