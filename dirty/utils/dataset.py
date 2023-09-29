@@ -81,7 +81,10 @@ class Example:
 
         # Remove variables that overlap on memory or don't appear in the code tokens
         source_code_tokens_set = set(code_tokens)
-        target_code_tokens_set = set(tokenize_raw_code(cf.debug.raw_code))
+        if cf.debug.raw_code is None: 
+            target_code_tokens_set = set(code_tokens)
+        else:
+            target_code_tokens_set = set(tokenize_raw_code(cf.debug.raw_code))
 
         source = Example.filter(source, source_code_tokens_set)
         target = Example.filter(target, target_code_tokens_set, set(source.keys()))
